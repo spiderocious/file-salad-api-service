@@ -1,0 +1,13 @@
+# build output
+/bin/
+/tmp/
+*.out
+
+# env — never commit real secrets; .env.example is the template
+.env
+.env.local
+.env.*.local
+
+# os / editor
+.DS_Store
+*.log
