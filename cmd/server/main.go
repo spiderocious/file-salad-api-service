@@ -28,6 +28,7 @@ import (
 	appredis "github.com/feranmi/file-salad-backend/internal/redis"
 	"github.com/feranmi/file-salad-backend/internal/security"
 	"github.com/feranmi/file-salad-backend/internal/session"
+	"github.com/feranmi/file-salad-backend/internal/stats"
 	"github.com/feranmi/file-salad-backend/internal/storage"
 )
 
@@ -153,12 +154,13 @@ func buildDeps(ctx context.Context, cfg *env.Env, database *mongo.Database, rdb 
 			DownloadTTL:     cfg.DownloadURLTTL,
 		}, rdb)
 		counter := quota.NewCounter(database, cfg.MonthlyUploadCap)
+		statsCounter := stats.NewCounter(database)
 
 		uploadSvc := uploads.NewService(uploadRepo, store, counter, cfg.MaxFileSizeBytes, cfg.HostedLinkExpiryDays)
-		deps.Uploads = &uploads.Deps{Service: uploadSvc, JWT: jwt}
+		deps.Uploads = &uploads.Deps{Service: uploadSvc, JWT: jwt, Counter: statsCounter}
 
 		deps.WebUploads = &webuploads.Deps{
-			Repo: uploadRepo, Store: store, Quota: counter,
+			Repo: uploadRepo, Store: store, Quota: counter, Stats: statsCounter,
 			MaxFileSize: cfg.MaxFileSizeBytes, LinkDays: cfg.HostedLinkExpiryDays,
 		}
 	} else {

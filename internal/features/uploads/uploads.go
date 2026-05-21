@@ -18,15 +18,23 @@ const (
 	maxLimit     = 50
 )
 
+// uploadCounter is the cross-cutting "total presigns" metric. Fire-and-forget:
+// the handler calls it after the response is written, so it never affects the
+// presign path. A nil counter is tolerated (feature works without it).
+type uploadCounter interface {
+	IncrementAsync()
+}
+
 // Deps are what the feature needs from app.
 type Deps struct {
 	Service *Service
 	JWT     *security.JWTSigner
+	Counter uploadCounter // optional; nil disables the global upload counter
 }
 
 // Register mounts the hosted-upload routes (all authenticated).
 func Register(rg *gin.RouterGroup, deps Deps) {
-	h := &handlers{svc: deps.Service}
+	h := &handlers{svc: deps.Service, counter: deps.Counter}
 	g := rg.Group("/uploads", middleware.RequireAuth(deps.JWT))
 
 	g.POST("/presign", h.presign)
@@ -36,7 +44,8 @@ func Register(rg *gin.RouterGroup, deps Deps) {
 }
 
 type handlers struct {
-	svc *Service
+	svc     *Service
+	counter uploadCounter
 }
 
 func (h *handlers) presign(c *gin.Context) {
@@ -60,6 +69,10 @@ func (h *handlers) presign(c *gin.Context) {
 		"expires_in": res.ExpiresIn,
 		"usage":      gin.H{"used": used, "limit": limit},
 	})
+	// Bump the global counter in the background — never blocks the response.
+	if h.counter != nil {
+		h.counter.IncrementAsync()
+	}
 }
 
 func (h *handlers) complete(c *gin.Context) {

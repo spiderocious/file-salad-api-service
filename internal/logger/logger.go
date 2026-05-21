@@ -64,6 +64,17 @@ func (h contextHandler) Handle(ctx context.Context, r slog.Record) error {
 	return h.Handler.Handle(ctx, r)
 }
 
+// WithAttrs and WithGroup must re-wrap so that .With(...) on the logger keeps
+// the context-field injection. Without these, the embedded handler's methods
+// return a bare handler and request-scoped fields are silently dropped.
+func (h contextHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return contextHandler{h.Handler.WithAttrs(attrs)}
+}
+
+func (h contextHandler) WithGroup(name string) slog.Handler {
+	return contextHandler{h.Handler.WithGroup(name)}
+}
+
 func redact(_ []string, a slog.Attr) slog.Attr {
 	if _, hit := redactKeys[strings.ToLower(a.Key)]; hit {
 		return slog.Attr{}

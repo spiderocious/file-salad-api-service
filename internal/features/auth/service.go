@@ -11,20 +11,35 @@ import (
 	"github.com/feranmi/file-salad-backend/internal/session"
 )
 
+// userRepo and sessionStore are the narrow interfaces the service depends on,
+// so tests can inject fakes (e.g. to force DB/Redis failures) without a mocking
+// framework. The concrete *Repo and *session.Store satisfy them.
+type userRepo interface {
+	Insert(ctx context.Context, u *User) error
+	FindByEmail(ctx context.Context, email string) (*User, error)
+	FindByID(ctx context.Context, id string) (*User, error)
+}
+
+type sessionStore interface {
+	Create(ctx context.Context, userID string) (string, error)
+	Rotate(ctx context.Context, presentedRaw string) (newRaw, userID string, err error)
+	Revoke(ctx context.Context, presentedRaw string) error
+}
+
 // Service holds auth business logic. It returns (T, *apperror.Error): a nil
 // error means success. Expected failures (bad creds, taken email) come back as
 // typed app errors; unexpected ones (DB/Redis down) come back as a wrapped 500.
 type Service struct {
-	repo     *Repo
-	sessions *session.Store
+	repo     userRepo
+	sessions sessionStore
 	jwt      *security.JWTSigner
 }
 
-func NewService(repo *Repo, sessions *session.Store, jwt *security.JWTSigner) *Service {
+func NewService(repo userRepo, sessions sessionStore, jwt *security.JWTSigner) *Service {
 	return &Service{repo: repo, sessions: sessions, jwt: jwt}
 }
 
-func internalErr(err error) *apperror.Error {
+func internalErr(_ error) *apperror.Error {
 	return &apperror.Error{
 		Code:    "internal",
 		Status:  500,

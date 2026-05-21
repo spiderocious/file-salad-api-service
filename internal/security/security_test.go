@@ -31,9 +31,28 @@ func TestHashAndVerifyPassword(t *testing.T) {
 	}
 }
 
-func TestVerifyPasswordRejectsGarbageHash(t *testing.T) {
-	if _, err := VerifyPassword("x", "not-a-real-hash"); err == nil {
-		t.Fatal("expected error on malformed hash")
+func TestVerifyPasswordRejectsMalformedHashes(t *testing.T) {
+	cases := []string{
+		"not-a-real-hash",
+		"$argon2id$v=19$m=65536,t=3,p=1$onlyfivefields",      // too few segments
+		"$bcrypt$v=19$m=1,t=1,p=1$c2FsdA$aGFzaA",             // wrong algorithm
+		"$argon2id$vXX$m=65536,t=3,p=1$c2FsdA$aGFzaA",        // bad version
+		"$argon2id$v=19$bad-params$c2FsdA$aGFzaA",            // bad params
+		"$argon2id$v=19$m=65536,t=3,p=1$!!!notbase64$aGFzaA", // bad salt b64
+		"$argon2id$v=19$m=65536,t=3,p=1$c2FsdA$!!!notbase64", // bad hash b64
+	}
+	for _, h := range cases {
+		if _, err := VerifyPassword("x", h); err == nil {
+			t.Errorf("expected error on malformed hash: %q", h)
+		}
+	}
+}
+
+func TestHashProducesDistinctSalts(t *testing.T) {
+	h1, _ := HashPassword("Password123")
+	h2, _ := HashPassword("Password123")
+	if h1 == h2 {
+		t.Fatal("same password produced identical hashes — salt not random")
 	}
 }
 

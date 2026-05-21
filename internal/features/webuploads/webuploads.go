@@ -6,6 +6,7 @@
 package webuploads
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"path"
@@ -24,11 +25,20 @@ import (
 
 const fingerprintHeader = "X-Fingerprint"
 
+// statsCounter is the cross-cutting "total uploads" metric: an async increment
+// (fire-and-forget, never blocks the presign) plus a read for the public
+// /web/stats endpoint. Optional — a nil counter disables both.
+type statsCounter interface {
+	IncrementAsync()
+	Total(ctx context.Context) (int64, error)
+}
+
 // Deps are what the feature needs from app.
 type Deps struct {
 	Repo        *uploads.Repo
 	Store       *storage.Storage
 	Quota       *quota.Counter
+	Stats       statsCounter // optional; powers the global counter + /web/stats
 	MaxFileSize int64
 	LinkDays    int
 }
@@ -40,6 +50,7 @@ func Register(rg *gin.RouterGroup, deps Deps) {
 	g.POST("/uploads/presign", h.presign)
 	g.GET("/uploads/:id/download", h.download)
 	g.GET("/usage", h.usage)
+	g.GET("/stats", h.stats)
 }
 
 type handlers struct {
@@ -142,6 +153,25 @@ func (h *handlers) presign(c *gin.Context) {
 		"expires_in": h.d.Store.UploadTTLSeconds(),
 		"remaining":  remaining,
 	})
+	// Bump the global counter in the background — never blocks the response.
+	if h.d.Stats != nil {
+		h.d.Stats.IncrementAsync()
+	}
+}
+
+// stats is the public "files shared so far" counter for the web one-pager. No
+// auth, no fingerprint — just the running total.
+func (h *handlers) stats(c *gin.Context) {
+	if h.d.Stats == nil {
+		response.OK(c, gin.H{"uploads_total": 0}, nil)
+		return
+	}
+	total, err := h.d.Stats.Total(c.Request.Context())
+	if err != nil {
+		_ = c.Error(internalErr(err))
+		return
+	}
+	response.OK(c, gin.H{"uploads_total": total}, nil)
 }
 
 func (h *handlers) download(c *gin.Context) {
