@@ -353,7 +353,12 @@ func TestWebUploadFlowIntegration(t *testing.T) {
 		if code != 201 {
 			t.Fatalf("web presign %d code %d", i, code)
 		}
-		id = dataMap(body)["upload_id"].(string)
+		d := dataMap(body)
+		id = d["upload_id"].(string)
+		// public_url is a presigned GET (works on a private bucket).
+		if pu, _ := d["public_url"].(string); !strings.Contains(pu, "X-Amz-Signature=") {
+			t.Fatalf("web public_url not a presigned GET: %v", pu)
+		}
 	}
 	// 3rd → 403 quota_exceeded (cap reached, no upsell)
 	if code, body := h.do(t, "POST", "/api/v1/web/uploads/presign",

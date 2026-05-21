@@ -80,3 +80,20 @@ func TestIncrementAsyncEventuallyCounts(t *testing.T) {
 		t.Fatalf("async total = %d, want 3", total)
 	}
 }
+
+// Total surfaces an error when the underlying connection is gone (covers the
+// error branch, not just the happy path).
+func TestTotalError(t *testing.T) {
+	ctx := context.Background()
+	name := fmt.Sprintf("filesalad_stats_err_%d", time.Now().UnixNano())
+	mc, err := db.Connect(ctx, mongoURI(), name)
+	if err != nil {
+		t.Skipf("MongoDB not reachable (%v) — skipping", err)
+	}
+	c := stats.NewCounter(mc.DB)
+	_ = mc.Disconnect(ctx) // sever the connection
+
+	if _, err := c.Total(ctx); err == nil {
+		t.Fatal("expected Total to error after disconnect")
+	}
+}
