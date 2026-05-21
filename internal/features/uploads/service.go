@@ -61,6 +61,16 @@ func (s *Service) Presign(ctx context.Context, userID, filename, contentType str
 		return nil, 0, 0, internalErr(err)
 	}
 
+	// public_url is a presigned GET — always resolves (even on a private bucket)
+	// and expires with DOWNLOAD_URL_TTL. The client can re-fetch a fresh one any
+	// time via the download endpoint; the durable identifier is the key. Uses the
+	// non-caching presign so it doesn't pre-warm the download cache.
+	publicURL, err := s.store.PresignDownloadURL(ctx, key)
+	if err != nil {
+		_ = s.quota.Release(ctx, scope)
+		return nil, 0, 0, internalErr(err)
+	}
+
 	u := &Upload{
 		ID:          ids.Prefixed("up"),
 		OwnerID:     userID,
@@ -70,7 +80,6 @@ func (s *Service) Presign(ctx context.Context, userID, filename, contentType str
 		ContentType: contentType,
 		Size:        size,
 		Status:      StatusPending,
-		PublicURL:   s.store.PublicURL(key),
 		ExpiresAt:   nowExpiry(s.linkDays),
 		CreatedAt:   nowUTC(),
 	}
@@ -83,7 +92,7 @@ func (s *Service) Presign(ctx context.Context, userID, filename, contentType str
 		UploadID:  u.ID,
 		Key:       u.Key,
 		UploadURL: uploadURL,
-		PublicURL: u.PublicURL,
+		PublicURL: publicURL,
 		ExpiresIn: int(s.store.UploadTTLSeconds()),
 	}, used, s.quota.Cap(), nil
 }

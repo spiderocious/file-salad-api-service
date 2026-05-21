@@ -86,7 +86,7 @@ func corsMiddleware(webBaseURL string) gin.HandlerFunc {
 			h.Set("Vary", "Origin")
 			h.Set("Access-Control-Allow-Credentials", "true")
 			h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-			h.Set("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization, X-Request-Id")
+			h.Set("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization, X-Request-Id, X-Fingerprint")
 		}
 
 		if c.Request.Method == http.MethodOptions {

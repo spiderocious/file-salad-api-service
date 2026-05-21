@@ -1,8 +1,12 @@
 package webuploads
 
 import (
+	"encoding/json"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/gin-gonic/gin"
 )
 
 func TestWebScope(t *testing.T) {
@@ -16,6 +20,26 @@ func TestObjectKey(t *testing.T) {
 	key := objectKey("photo.JPEG")
 	if !strings.HasPrefix(key, "f_") || !strings.HasSuffix(key, ".jpeg") {
 		t.Fatalf("key shape wrong: %s", key)
+	}
+}
+
+// When no stats counter is wired, /web/stats returns 0 rather than erroring.
+func TestStatsHandlerNilCounter(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest("GET", "/api/v1/web/stats", nil)
+
+	h := &handlers{d: Deps{}} // Stats is nil
+	h.stats(c)
+
+	if rec.Code != 200 {
+		t.Fatalf("code %d", rec.Code)
+	}
+	var env map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &env)
+	if env["data"].(map[string]any)["uploads_total"].(float64) != 0 {
+		t.Fatalf("nil-counter total should be 0: %v", env["data"])
 	}
 }
 

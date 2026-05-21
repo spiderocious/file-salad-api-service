@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -92,8 +93,7 @@ func setup(t *testing.T) *harness {
 	store := storage.New(storage.Config{
 		Endpoint: "https://t3.storage.dev", Region: "auto",
 		AccessKeyID: "k", SecretAccessKey: "s", Bucket: "filesalad",
-		PublicBaseURL: "https://filesalad.t3.storage.dev",
-		UploadTTL:     15 * time.Minute, DownloadTTL: time.Hour,
+		UploadTTL: 15 * time.Minute, DownloadTTL: time.Hour,
 	}, rc)
 	counter := quota.NewCounter(mc.DB, 2) // small cap so we can hit it fast
 	statsCounter := stats.NewCounter(mc.DB)
@@ -231,6 +231,11 @@ func TestHostedUploadFlowIntegration(t *testing.T) {
 	id := d["upload_id"].(string)
 	if d["upload_url"] == nil || d["public_url"] == nil || d["key"] == nil {
 		t.Fatalf("presign missing fields: %v", d)
+	}
+	// public_url must be a presigned GET (resolves on a private bucket), not a
+	// bare constructed URL.
+	if pu, _ := d["public_url"].(string); !strings.Contains(pu, "X-Amz-Signature=") {
+		t.Fatalf("public_url is not a presigned GET: %v", pu)
 	}
 	usage := d["usage"].(map[string]any)
 	if usage["used"].(float64) != 1 {

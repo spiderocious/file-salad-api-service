@@ -20,7 +20,6 @@ func newStorage(t *testing.T, withRedis bool) (*storage.Storage, *miniredis.Mini
 		AccessKeyID:     "tid_test",
 		SecretAccessKey: "tsec_test",
 		Bucket:          "filesalad",
-		PublicBaseURL:   "https://filesalad.t3.storage.dev",
 		UploadTTL:       15 * time.Minute,
 		DownloadTTL:     time.Hour,
 	}
@@ -40,13 +39,6 @@ func newStorage(t *testing.T, withRedis bool) (*storage.Storage, *miniredis.Mini
 		t.Cleanup(func() { _ = rc.Close() })
 	}
 	return storage.New(cfg, rc), mr
-}
-
-func TestPublicURL(t *testing.T) {
-	s, _ := newStorage(t, false)
-	if got := s.PublicURL("f_abc.png"); got != "https://filesalad.t3.storage.dev/f_abc.png" {
-		t.Fatalf("PublicURL = %s", got)
-	}
 }
 
 func TestTTLSeconds(t *testing.T) {
@@ -102,6 +94,23 @@ func TestPresignDownloadAndCache(t *testing.T) {
 	// The cache key exists with a TTL below the signature TTL.
 	if !mr.Exists("dluri:f_abc.png") {
 		t.Fatal("cache key not set")
+	}
+}
+
+func TestPresignDownloadURLNoCache(t *testing.T) {
+	s, mr := newStorage(t, true)
+	ctx := context.Background()
+
+	url, err := s.PresignDownloadURL(ctx, "f_nocache.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(url, "X-Amz-Signature=") {
+		t.Fatalf("not a signed url: %s", url)
+	}
+	// Must NOT have populated the download cache.
+	if mr.Exists("dluri:f_nocache.png") {
+		t.Fatal("PresignDownloadURL should not write the cache")
 	}
 }
 

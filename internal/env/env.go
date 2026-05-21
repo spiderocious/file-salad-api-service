@@ -41,8 +41,7 @@ type Env struct {
 	StorageAccessKeyID     string
 	StorageSecretAccessKey string
 	StorageBucket          string
-	StoragePublicBaseURL   string // public read base, e.g. https://<bucket>.t3.storage.dev
-	StorageUsePathStyle    bool   // force path-style addressing (default virtual-hosted)
+	StorageUsePathStyle    bool // force path-style addressing (default virtual-hosted)
 
 	// Upload tuning.
 	UploadURLTTL         time.Duration // presigned PUT validity
@@ -135,7 +134,6 @@ func Load() (*Env, error) {
 		StorageAccessKeyID:     os.Getenv("STORAGE_ACCESS_KEY_ID"),
 		StorageSecretAccessKey: os.Getenv("STORAGE_SECRET_ACCESS_KEY"),
 		StorageBucket:          os.Getenv("STORAGE_BUCKET"),
-		StoragePublicBaseURL:   os.Getenv("STORAGE_PUBLIC_BASE_URL"),
 		StorageUsePathStyle:    os.Getenv("STORAGE_USE_PATH_STYLE") == "true",
 		UploadURLTTL:           uploadTTL,
 		DownloadURLTTL:         downloadTTL,
@@ -148,8 +146,7 @@ func Load() (*Env, error) {
 // StorageConfigured reports whether the storage vars needed to presign are set.
 func (e *Env) StorageConfigured() bool {
 	return e.StorageEndpoint != "" && e.StorageAccessKeyID != "" &&
-		e.StorageSecretAccessKey != "" && e.StorageBucket != "" &&
-		e.StoragePublicBaseURL != ""
+		e.StorageSecretAccessKey != "" && e.StorageBucket != ""
 }
 
 func (e *Env) IsProduction() bool { return e.NodeEnv == "production" }

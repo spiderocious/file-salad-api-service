@@ -123,6 +123,16 @@ func (h *handlers) presign(c *gin.Context) {
 		return
 	}
 
+	// public_url is a presigned GET — always resolves (even on a private bucket),
+	// expires with DOWNLOAD_URL_TTL. Durable identifier is the key. Non-caching
+	// presign so it doesn't pre-warm the download cache.
+	publicURL, perr := h.d.Store.PresignDownloadURL(ctx, key)
+	if perr != nil {
+		_ = h.d.Quota.Release(ctx, scope)
+		_ = c.Error(internalErr(perr))
+		return
+	}
+
 	u := &uploads.Upload{
 		ID:          ids.Prefixed("up"),
 		Surface:     uploads.SurfaceWeb,
@@ -131,7 +141,6 @@ func (h *handlers) presign(c *gin.Context) {
 		ContentType: body.ContentType,
 		Size:        body.Size,
 		Status:      uploads.StatusPending,
-		PublicURL:   h.d.Store.PublicURL(key),
 		ExpiresAt:   nowExpiry(h.d.LinkDays),
 		CreatedAt:   nowUTC(),
 	}
@@ -149,7 +158,7 @@ func (h *handlers) presign(c *gin.Context) {
 		"upload_id":  u.ID,
 		"key":        u.Key,
 		"upload_url": uploadURL,
-		"public_url": u.PublicURL,
+		"public_url": publicURL,
 		"expires_in": h.d.Store.UploadTTLSeconds(),
 		"remaining":  remaining,
 	})

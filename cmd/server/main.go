@@ -148,7 +148,6 @@ func buildDeps(ctx context.Context, cfg *env.Env, database *mongo.Database, rdb 
 			AccessKeyID:     cfg.StorageAccessKeyID,
 			SecretAccessKey: cfg.StorageSecretAccessKey,
 			Bucket:          cfg.StorageBucket,
-			PublicBaseURL:   cfg.StoragePublicBaseURL,
 			UsePathStyle:    cfg.StorageUsePathStyle,
 			UploadTTL:       cfg.UploadURLTTL,
 			DownloadTTL:     cfg.DownloadURLTTL,

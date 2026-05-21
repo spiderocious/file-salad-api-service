@@ -107,7 +107,6 @@ func TestStorageConfigured(t *testing.T) {
 	t.Setenv("STORAGE_ACCESS_KEY_ID", "k")
 	t.Setenv("STORAGE_SECRET_ACCESS_KEY", "s")
 	t.Setenv("STORAGE_BUCKET", "b")
-	t.Setenv("STORAGE_PUBLIC_BASE_URL", "https://b.t3.storage.dev")
 	e, _ = Load()
 	if !e.StorageConfigured() {
 		t.Fatal("storage should be configured with all STORAGE_* vars")

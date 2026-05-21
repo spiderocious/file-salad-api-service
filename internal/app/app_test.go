@@ -3,6 +3,7 @@ package app_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/feranmi/file-salad-backend/internal/app"
@@ -56,11 +57,21 @@ func TestCORSWildcardReflectsOrigin(t *testing.T) {
 func TestCORSPreflight(t *testing.T) {
 	h := buildBare()
 	rec := httptest.NewRecorder()
-	r := httptest.NewRequest("OPTIONS", "/api/v1/health", nil)
-	r.Header.Set("Origin", "https://example.com")
+	r := httptest.NewRequest("OPTIONS", "/api/v1/web/uploads/presign", nil)
+	r.Header.Set("Origin", "http://localhost:5173")
+	r.Header.Set("Access-Control-Request-Method", "POST")
+	r.Header.Set("Access-Control-Request-Headers", "content-type,x-fingerprint")
 	h.ServeHTTP(rec, r)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("preflight code %d, want 204", rec.Code)
+	}
+	// The web client sends X-Fingerprint; it must be in the allow-list or the
+	// browser blocks the request before it's sent.
+	allowed := rec.Header().Get("Access-Control-Allow-Headers")
+	for _, h := range []string{"X-Fingerprint", "Content-Type", "Authorization"} {
+		if !strings.Contains(allowed, h) {
+			t.Errorf("Access-Control-Allow-Headers missing %q: %s", h, allowed)
+		}
 	}
 }
 

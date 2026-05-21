@@ -4,6 +4,10 @@ import "time"
 
 // Upload is a persisted upload record. Surface is "hosted" (this feature) or
 // "web" (the anonymous one-pager). OwnerID is empty for web.
+//
+// We persist only the object Key, not a URL. Every URL handed to a client is a
+// freshly presigned GET (the durable identifier is the key); a stored URL would
+// just go stale.
 type Upload struct {
 	ID          string    `bson:"_id" json:"id"`
 	OwnerID     string    `bson:"owner_id,omitempty" json:"owner_id,omitempty"`
@@ -13,7 +17,6 @@ type Upload struct {
 	ContentType string    `bson:"content_type" json:"content_type"`
 	Size        int64     `bson:"size" json:"size"`
 	Status      string    `bson:"status" json:"status"` // pending | ready
-	PublicURL   string    `bson:"public_url" json:"public_url"`
 	ExpiresAt   time.Time `bson:"expires_at" json:"expires_at"`
 	CreatedAt   time.Time `bson:"created_at" json:"created_at"`
 }
@@ -25,7 +28,8 @@ const (
 	StatusReady   = "ready"
 )
 
-// PresignResponse is returned by the presign endpoints.
+// PresignResponse is returned by the presign endpoints. public_url is a
+// presigned GET URL (resolves immediately, expires with DOWNLOAD_URL_TTL).
 type PresignResponse struct {
 	UploadID  string `json:"upload_id"`
 	Key       string `json:"key"`

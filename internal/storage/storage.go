@@ -12,7 +12,6 @@ package storage
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -30,7 +29,6 @@ type Config struct {
 	AccessKeyID     string
 	SecretAccessKey string
 	Bucket          string
-	PublicBaseURL   string
 	// UsePathStyle forces path-style addressing (bucket in the path). Default
 	// false → virtual-hosted (bucket in the host), which Tigris and modern S3
 	// expect. Some R2/MinIO setups want true.
@@ -69,12 +67,6 @@ func New(cfg Config, rdb *redis.Client) *Storage {
 	}
 }
 
-// PublicURL returns the durable public URL for an object key (served by the
-// bucket's public base / CDN, not by us).
-func (s *Storage) PublicURL(key string) string {
-	return strings.TrimRight(s.cfg.PublicBaseURL, "/") + "/" + key
-}
-
 // UploadTTLSeconds / DownloadTTLSeconds expose the configured TTLs in seconds
 // for the expires_in response fields.
 func (s *Storage) UploadTTLSeconds() int   { return int(s.cfg.UploadTTL.Seconds()) }
@@ -99,7 +91,8 @@ func (s *Storage) PresignUpload(ctx context.Context, key, contentType string) (s
 
 // PresignDownload returns a presigned GET URL for a key, caching it in Redis
 // (Level 1) so repeated requests within the window get the same URL. cached
-// reports whether the URL came from the cache.
+// reports whether the URL came from the cache. Use this for the download
+// endpoint, where the same key is fetched repeatedly.
 func (s *Storage) PresignDownload(ctx context.Context, key string) (url string, cached bool, err error) {
 	cacheKey := "dluri:" + key
 
@@ -112,12 +105,9 @@ func (s *Storage) PresignDownload(ctx context.Context, key string) (url string, 
 		}
 	}
 
-	req, err := s.presign.PresignGetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(s.cfg.Bucket),
-		Key:    aws.String(key),
-	}, s3.WithPresignExpires(s.cfg.DownloadTTL))
+	signed, err := s.presignGet(ctx, key)
 	if err != nil {
-		return "", false, fmt.Errorf("presign get: %w", err)
+		return "", false, err
 	}
 
 	if s.rdb != nil {
@@ -127,8 +117,27 @@ func (s *Storage) PresignDownload(ctx context.Context, key string) (url string, 
 		if ttl <= 0 {
 			ttl = s.cfg.DownloadTTL
 		}
-		_ = s.rdb.Set(ctx, cacheKey, req.URL, ttl).Err()
+		_ = s.rdb.Set(ctx, cacheKey, signed, ttl).Err()
 	}
 
-	return req.URL, false, nil
+	return signed, false, nil
+}
+
+// PresignDownloadURL returns a presigned GET URL without touching the cache.
+// Used for the public_url returned at upload time — that's a one-off value, not
+// a repeated lookup, so it shouldn't pollute (or read from) the download cache.
+func (s *Storage) PresignDownloadURL(ctx context.Context, key string) (string, error) {
+	return s.presignGet(ctx, key)
+}
+
+// presignGet is the raw presigned-GET computation (local HMAC, no cache).
+func (s *Storage) presignGet(ctx context.Context, key string) (string, error) {
+	req, err := s.presign.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(s.cfg.Bucket),
+		Key:    aws.String(key),
+	}, s3.WithPresignExpires(s.cfg.DownloadTTL))
+	if err != nil {
+		return "", fmt.Errorf("presign get: %w", err)
+	}
+	return req.URL, nil
 }
