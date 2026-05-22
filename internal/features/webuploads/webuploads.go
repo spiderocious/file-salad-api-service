@@ -154,13 +154,19 @@ func (h *handlers) presign(c *gin.Context) {
 	if remaining < 0 {
 		remaining = 0
 	}
+	upSecs, upAt := h.d.Store.UploadExpiry()
+	pubSecs, pubAt := h.d.Store.DownloadExpiry()
 	response.Created(c, gin.H{
-		"upload_id":  u.ID,
-		"key":        u.Key,
-		"upload_url": uploadURL,
-		"public_url": publicURL,
-		"expires_in": h.d.Store.UploadTTLSeconds(),
-		"remaining":  remaining,
+		"upload_id":             u.ID,
+		"key":                   u.Key,
+		"upload_url":            uploadURL,
+		"upload_url_expires_in": upSecs,
+		"upload_url_expires_at": upAt,
+		"public_url":            publicURL,
+		"public_url_expires_in": pubSecs,
+		"public_url_expires_at": pubAt,
+		"expires_in":            upSecs, // deprecated alias (== upload_url_expires_in)
+		"remaining":             remaining,
 	})
 	// Bump the global counter in the background — never blocks the response.
 	if h.d.Stats != nil {
@@ -199,9 +205,11 @@ func (h *handlers) download(c *gin.Context) {
 		_ = c.Error(internalErr(perr))
 		return
 	}
+	secs, at := h.d.Store.DownloadExpiry()
 	response.OK(c, gin.H{
 		"download_url": url,
-		"expires_in":   h.d.Store.DownloadTTLSeconds(),
+		"expires_in":   secs,
+		"expires_at":   at,
 		"cached":       cached,
 	}, nil)
 }

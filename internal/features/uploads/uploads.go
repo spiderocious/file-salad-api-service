@@ -62,12 +62,16 @@ func (h *handlers) presign(c *gin.Context) {
 		return
 	}
 	response.Created(c, gin.H{
-		"upload_id":  res.UploadID,
-		"key":        res.Key,
-		"upload_url": res.UploadURL,
-		"public_url": res.PublicURL,
-		"expires_in": res.ExpiresIn,
-		"usage":      gin.H{"used": used, "limit": limit},
+		"upload_id":             res.UploadID,
+		"key":                   res.Key,
+		"upload_url":            res.UploadURL,
+		"upload_url_expires_in": res.UploadURLExpiresIn,
+		"upload_url_expires_at": res.UploadURLExpiresAt,
+		"public_url":            res.PublicURL,
+		"public_url_expires_in": res.PublicURLExpiresIn,
+		"public_url_expires_at": res.PublicURLExpiresAt,
+		"expires_in":            res.ExpiresIn, // deprecated alias (== upload_url_expires_in)
+		"usage":                 gin.H{"used": used, "limit": limit},
 	})
 	// Bump the global counter in the background — never blocks the response.
 	if h.counter != nil {
@@ -106,12 +110,17 @@ func (h *handlers) list(c *gin.Context) {
 
 func (h *handlers) download(c *gin.Context) {
 	userID := c.GetString(middleware.ContextUserID)
-	url, cached, expiresIn, err := h.svc.Download(c.Request.Context(), userID, c.Param("id"))
+	url, cached, expiresIn, expiresAt, err := h.svc.Download(c.Request.Context(), userID, c.Param("id"))
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
-	response.OK(c, gin.H{"download_url": url, "expires_in": expiresIn, "cached": cached}, nil)
+	response.OK(c, gin.H{
+		"download_url": url,
+		"expires_in":   expiresIn,
+		"expires_at":   expiresAt,
+		"cached":       cached,
+	}, nil)
 }
 
 func clampLimit(raw string) int {

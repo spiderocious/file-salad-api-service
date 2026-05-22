@@ -70,6 +70,21 @@ func (r *Repo) FindByIDWeb(ctx context.Context, id string) (*Upload, error) {
 	return &u, nil
 }
 
+// FindByID returns an upload by id regardless of surface. Used by share-code
+// creation, where the upload_id is the capability (the file is already public
+// via presigned URLs, so the id alone is enough to mint a pointer to it).
+func (r *Repo) FindByID(ctx context.Context, id string) (*Upload, error) {
+	var u Upload
+	err := r.col.FindOne(ctx, bson.M{"_id": id}).Decode(&u)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
 // MarkReady flips a pending upload to ready for the given owner.
 func (r *Repo) MarkReady(ctx context.Context, id, ownerID string) (*Upload, error) {
 	res := r.col.FindOneAndUpdate(

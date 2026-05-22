@@ -21,6 +21,7 @@ import (
 	"github.com/feranmi/file-salad-backend/internal/db"
 	"github.com/feranmi/file-salad-backend/internal/env"
 	"github.com/feranmi/file-salad-backend/internal/features/auth"
+	"github.com/feranmi/file-salad-backend/internal/features/share"
 	"github.com/feranmi/file-salad-backend/internal/features/uploads"
 	"github.com/feranmi/file-salad-backend/internal/features/webuploads"
 	"github.com/feranmi/file-salad-backend/internal/logger"
@@ -28,6 +29,7 @@ import (
 	appredis "github.com/feranmi/file-salad-backend/internal/redis"
 	"github.com/feranmi/file-salad-backend/internal/security"
 	"github.com/feranmi/file-salad-backend/internal/session"
+	"github.com/feranmi/file-salad-backend/internal/sharecode"
 	"github.com/feranmi/file-salad-backend/internal/stats"
 	"github.com/feranmi/file-salad-backend/internal/storage"
 )
@@ -161,6 +163,14 @@ func buildDeps(ctx context.Context, cfg *env.Env, database *mongo.Database, rdb 
 		deps.WebUploads = &webuploads.Deps{
 			Repo: uploadRepo, Store: store, Quota: counter, Stats: statsCounter,
 			MaxFileSize: cfg.MaxFileSizeBytes, LinkDays: cfg.HostedLinkExpiryDays,
+		}
+
+		// Share codes need Redis (code store + redeem rate limiter).
+		if rdb != nil {
+			codes := sharecode.NewStore(rdb, cfg.ShareCodeTTL)
+			deps.Share = &share.Deps{Uploads: uploadRepo, Codes: codes, Store: store, Redis: rdb}
+		} else {
+			logger.Warn(ctx, "share feature not mounted (needs Redis)")
 		}
 	} else {
 		logger.Warn(ctx, "upload features not mounted (need Mongo + storage config)")

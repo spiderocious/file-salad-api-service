@@ -11,6 +11,7 @@ import (
 	"github.com/feranmi/file-salad-backend/internal/env"
 	"github.com/feranmi/file-salad-backend/internal/features/auth"
 	"github.com/feranmi/file-salad-backend/internal/features/health"
+	"github.com/feranmi/file-salad-backend/internal/features/share"
 	"github.com/feranmi/file-salad-backend/internal/features/uploads"
 	webuploads "github.com/feranmi/file-salad-backend/internal/features/webuploads"
 	"github.com/feranmi/file-salad-backend/internal/httpx"
@@ -24,6 +25,7 @@ type Deps struct {
 	Auth       auth.Deps
 	Uploads    *uploads.Deps    // nil when storage isn't configured
 	WebUploads *webuploads.Deps // nil when storage isn't configured
+	Share      *share.Deps      // nil when storage isn't configured
 }
 
 // Build returns the configured Gin engine.
@@ -52,6 +54,9 @@ func Build(cfg *env.Env, deps Deps) *gin.Engine {
 	}
 	if deps.WebUploads != nil {
 		webuploads.Register(api, *deps.WebUploads)
+	}
+	if deps.Share != nil {
+		share.Register(api, *deps.Share)
 	}
 
 	r.NoRoute(func(c *gin.Context) {

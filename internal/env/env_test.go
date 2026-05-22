@@ -28,6 +28,9 @@ func TestLoadDefaults(t *testing.T) {
 	if e.UploadURLTTL.Minutes() != 15 || e.DownloadURLTTL.Hours() != 1 {
 		t.Fatalf("ttl defaults wrong: %+v", e)
 	}
+	if e.ShareCodeTTL.Hours() != 24 {
+		t.Fatalf("share code ttl default wrong: %v", e.ShareCodeTTL)
+	}
 	if e.StorageRegion != "auto" {
 		t.Fatalf("region default = %q", e.StorageRegion)
 	}

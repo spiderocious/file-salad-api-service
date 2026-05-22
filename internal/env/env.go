@@ -49,6 +49,9 @@ type Env struct {
 	MonthlyUploadCap     int           // hosted free tier + web cap (per month)
 	MaxFileSizeBytes     int64         // per-file size limit
 	HostedLinkExpiryDays int           // public link lifetime (default 90)
+
+	// Share codes.
+	ShareCodeTTL time.Duration // how long a shareable code stays valid (default 24h)
 }
 
 const minSecretLen = 32
@@ -108,6 +111,10 @@ func Load() (*Env, error) {
 	if err != nil {
 		problems = append(problems, "DOWNLOAD_URL_TTL: must be a Go duration (e.g. 1h)")
 	}
+	shareCodeTTL, err := time.ParseDuration(getDefault("SHARE_CODE_TTL", "24h"))
+	if err != nil {
+		problems = append(problems, "SHARE_CODE_TTL: must be a Go duration (e.g. 24h)")
+	}
 
 	monthlyCap := mustInt("MONTHLY_UPLOAD_CAP", 50, &problems)
 	maxFileSize := mustInt64("MAX_FILE_SIZE_BYTES", 52428800, &problems) // 50 MB
@@ -140,6 +147,7 @@ func Load() (*Env, error) {
 		MonthlyUploadCap:       monthlyCap,
 		MaxFileSizeBytes:       maxFileSize,
 		HostedLinkExpiryDays:   linkExpiryDays,
+		ShareCodeTTL:           shareCodeTTL,
 	}, nil
 }
 

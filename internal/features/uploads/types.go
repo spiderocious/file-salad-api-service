@@ -28,12 +28,23 @@ const (
 	StatusReady   = "ready"
 )
 
-// PresignResponse is returned by the presign endpoints. public_url is a
-// presigned GET URL (resolves immediately, expires with DOWNLOAD_URL_TTL).
+// PresignResponse is returned by the presign endpoints. There are TWO presigned
+// URLs with DIFFERENT lifetimes, so each carries its own expiry:
+//   - upload_url: presigned PUT, lives UPLOAD_URL_TTL (e.g. 15m)
+//   - public_url: presigned GET, lives DOWNLOAD_URL_TTL (e.g. 2h)
+//
+// expires_in is kept (= the upload_url's TTL) for backward compatibility, but new
+// clients should read the explicit *_expires_in / *_expires_at fields. The _at
+// fields are absolute UTC RFC3339 timestamps, handy for deciding "is my stored
+// URL stale now?" without tracking when the response was received.
 type PresignResponse struct {
-	UploadID  string `json:"upload_id"`
-	Key       string `json:"key"`
-	UploadURL string `json:"upload_url"`
-	PublicURL string `json:"public_url"`
-	ExpiresIn int    `json:"expires_in"`
+	UploadID           string `json:"upload_id"`
+	Key                string `json:"key"`
+	UploadURL          string `json:"upload_url"`
+	UploadURLExpiresIn int    `json:"upload_url_expires_in"`
+	UploadURLExpiresAt string `json:"upload_url_expires_at"`
+	PublicURL          string `json:"public_url"`
+	PublicURLExpiresIn int    `json:"public_url_expires_in"`
+	PublicURLExpiresAt string `json:"public_url_expires_at"`
+	ExpiresIn          int    `json:"expires_in"` // deprecated: == upload_url_expires_in
 }

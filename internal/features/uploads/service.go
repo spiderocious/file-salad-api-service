@@ -88,12 +88,18 @@ func (s *Service) Presign(ctx context.Context, userID, filename, contentType str
 		return nil, 0, 0, internalErr(err)
 	}
 
+	upSecs, upAt := s.store.UploadExpiry()
+	pubSecs, pubAt := s.store.DownloadExpiry()
 	return &PresignResponse{
-		UploadID:  u.ID,
-		Key:       u.Key,
-		UploadURL: uploadURL,
-		PublicURL: publicURL,
-		ExpiresIn: int(s.store.UploadTTLSeconds()),
+		UploadID:           u.ID,
+		Key:                u.Key,
+		UploadURL:          uploadURL,
+		UploadURLExpiresIn: upSecs,
+		UploadURLExpiresAt: upAt,
+		PublicURL:          publicURL,
+		PublicURLExpiresIn: pubSecs,
+		PublicURLExpiresAt: pubAt,
+		ExpiresIn:          upSecs, // deprecated alias
 	}, used, s.quota.Cap(), nil
 }
 
@@ -126,20 +132,22 @@ func (s *Service) List(ctx context.Context, userID, cursor string, limit int) ([
 	return rows, next, hasMore, nil
 }
 
-// Download resolves a presigned GET URL for the user's upload.
-func (s *Service) Download(ctx context.Context, userID, uploadID string) (url string, cached bool, expiresIn int, aerr *apperror.Error) {
+// Download resolves a presigned GET URL for the user's upload, with both the
+// relative TTL and the absolute expiry timestamp.
+func (s *Service) Download(ctx context.Context, userID, uploadID string) (url string, cached bool, expiresIn int, expiresAt string, aerr *apperror.Error) {
 	u, err := s.repo.FindByIDOwner(ctx, uploadID, userID)
 	if err != nil {
 		if err == ErrNotFound {
-			return "", false, 0, apperror.NotFound("Upload")
+			return "", false, 0, "", apperror.NotFound("Upload")
 		}
-		return "", false, 0, internalErr(err)
+		return "", false, 0, "", internalErr(err)
 	}
 	signed, cached, err := s.store.PresignDownload(ctx, u.Key)
 	if err != nil {
-		return "", false, 0, internalErr(err)
+		return "", false, 0, "", internalErr(err)
 	}
-	return signed, cached, int(s.store.DownloadTTLSeconds()), nil
+	secs, at := s.store.DownloadExpiry()
+	return signed, cached, secs, at, nil
 }
 
 // objectKey builds a server-controlled key: {ulid}{ext}. Never trusts the

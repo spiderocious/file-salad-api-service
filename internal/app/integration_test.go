@@ -28,12 +28,14 @@ import (
 	"github.com/feranmi/file-salad-backend/internal/db"
 	"github.com/feranmi/file-salad-backend/internal/env"
 	"github.com/feranmi/file-salad-backend/internal/features/auth"
+	"github.com/feranmi/file-salad-backend/internal/features/share"
 	"github.com/feranmi/file-salad-backend/internal/features/uploads"
 	"github.com/feranmi/file-salad-backend/internal/features/webuploads"
 	"github.com/feranmi/file-salad-backend/internal/quota"
 	appredis "github.com/feranmi/file-salad-backend/internal/redis"
 	"github.com/feranmi/file-salad-backend/internal/security"
 	"github.com/feranmi/file-salad-backend/internal/session"
+	"github.com/feranmi/file-salad-backend/internal/sharecode"
 	"github.com/feranmi/file-salad-backend/internal/stats"
 	"github.com/feranmi/file-salad-backend/internal/storage"
 )
@@ -98,6 +100,7 @@ func setup(t *testing.T) *harness {
 	counter := quota.NewCounter(mc.DB, 2) // small cap so we can hit it fast
 	statsCounter := stats.NewCounter(mc.DB)
 	uploadSvc := uploads.NewService(uploadRepo, store, counter, 1000, 90)
+	codes := sharecode.NewStore(rc, time.Hour)
 
 	cfg := &env.Env{NodeEnv: "test", WebBaseURL: "*"}
 	engine := app.Build(cfg, app.Deps{
@@ -107,6 +110,7 @@ func setup(t *testing.T) *harness {
 			Repo: uploadRepo, Store: store, Quota: counter, Stats: statsCounter,
 			MaxFileSize: 1000, LinkDays: 90,
 		},
+		Share: &share.Deps{Uploads: uploadRepo, Codes: codes, Store: store, Redis: rc},
 	})
 
 	return &harness{engine: engine, dbName: dbName, mc: mc}
@@ -237,6 +241,19 @@ func TestHostedUploadFlowIntegration(t *testing.T) {
 	if pu, _ := d["public_url"].(string); !strings.Contains(pu, "X-Amz-Signature=") {
 		t.Fatalf("public_url is not a presigned GET: %v", pu)
 	}
+	// Each URL carries its own expiry; the public (download) TTL must exceed the
+	// upload TTL, and the absolute timestamps must be present.
+	upIn := d["upload_url_expires_in"].(float64)
+	pubIn := d["public_url_expires_in"].(float64)
+	if upIn <= 0 || pubIn <= 0 || pubIn <= upIn {
+		t.Fatalf("expiry seconds wrong: upload=%v public=%v", upIn, pubIn)
+	}
+	if d["upload_url_expires_at"] == "" || d["public_url_expires_at"] == "" {
+		t.Fatalf("missing *_expires_at: %v", d)
+	}
+	if d["expires_in"].(float64) != upIn {
+		t.Fatal("deprecated expires_in should equal upload_url_expires_in")
+	}
 	usage := d["usage"].(map[string]any)
 	if usage["used"].(float64) != 1 {
 		t.Fatalf("usage.used = %v", usage["used"])
@@ -366,8 +383,10 @@ func TestWebUploadFlowIntegration(t *testing.T) {
 		t.Fatalf("web cap code %d code=%s", code, errCode(body))
 	}
 
-	// download a web upload
-	if code, body := h.do(t, "GET", "/api/v1/web/uploads/"+id+"/download", nil, fp); code != 200 || dataMap(body)["download_url"] == nil {
+	// download a web upload — carries both relative and absolute expiry
+	if code, body := h.do(t, "GET", "/api/v1/web/uploads/"+id+"/download", nil, fp); code != 200 ||
+		dataMap(body)["download_url"] == nil || dataMap(body)["expires_at"] == "" ||
+		dataMap(body)["expires_in"].(float64) <= 0 {
 		t.Fatalf("web download %d %v", code, body)
 	}
 	// unknown web id → 404
@@ -484,6 +503,75 @@ func TestWebStatsIntegration(t *testing.T) {
 	}
 	if total != 3 {
 		t.Fatalf("uploads_total = %v, want 3 (2 web + 1 hosted)", total)
+	}
+}
+
+func TestShareCodeFlowIntegration(t *testing.T) {
+	h := setup(t)
+	fp := map[string]string{"X-Fingerprint": "fp_share"}
+
+	// Upload a web file to share.
+	_, body := h.do(t, "POST", "/api/v1/web/uploads/presign",
+		map[string]any{"filename": "doc.pdf", "content_type": "application/pdf", "size": 10}, fp)
+	uploadID := dataMap(body)["upload_id"].(string)
+
+	// Create a share code.
+	code, body := h.do(t, "POST", "/api/v1/share", map[string]string{"upload_id": uploadID}, nil)
+	if code != http.StatusCreated {
+		t.Fatalf("create share code %d body %v", code, body)
+	}
+	shareCode := dataMap(body)["code"].(string)
+	if len(shareCode) != 7 {
+		t.Fatalf("share code wrong length: %q", shareCode)
+	}
+	if dataMap(body)["expires_in"].(float64) <= 0 {
+		t.Fatal("expires_in should be positive")
+	}
+
+	// Redeem it → presigned download URL + filename.
+	code, body = h.do(t, "GET", "/api/v1/share/"+shareCode, nil, nil)
+	if code != 200 {
+		t.Fatalf("redeem %d body %v", code, body)
+	}
+	d := dataMap(body)
+	if d["filename"] != "doc.pdf" {
+		t.Fatalf("filename = %v", d["filename"])
+	}
+	if pu, _ := d["download_url"].(string); !strings.Contains(pu, "X-Amz-Signature=") {
+		t.Fatalf("download_url not a presigned GET: %v", pu)
+	}
+	if d["expires_at"] == "" || d["expires_in"].(float64) <= 0 {
+		t.Fatalf("redeem missing expiry fields: %v", d)
+	}
+
+	// Unknown code → 404.
+	if code, _ := h.do(t, "GET", "/api/v1/share/ZZZZZZZ", nil, nil); code != 404 {
+		t.Fatalf("unknown code should be 404, got %d", code)
+	}
+
+	// Create with unknown upload_id → 404; missing → 400.
+	if code, _ := h.do(t, "POST", "/api/v1/share", map[string]string{"upload_id": "up_nope"}, nil); code != 404 {
+		t.Fatalf("unknown upload should be 404, got %d", code)
+	}
+	if code, _ := h.do(t, "POST", "/api/v1/share", map[string]string{}, nil); code != 400 {
+		t.Fatalf("missing upload_id should be 400, got %d", code)
+	}
+}
+
+func TestShareRedeemRateLimitIntegration(t *testing.T) {
+	h := setup(t)
+	// The redeem limiter allows 10/min/IP. The 11th (even for an unknown code)
+	// must be 429 — proving brute-force is throttled.
+	var got429 bool
+	for i := 0; i < 12; i++ {
+		code, _ := h.do(t, "GET", "/api/v1/share/ABCDEFG", nil, nil)
+		if code == 429 {
+			got429 = true
+			break
+		}
+	}
+	if !got429 {
+		t.Fatal("expected a 429 within 12 redeem attempts (rate limit not enforced)")
 	}
 }
 

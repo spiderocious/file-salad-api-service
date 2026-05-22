@@ -72,6 +72,18 @@ func New(cfg Config, rdb *redis.Client) *Storage {
 func (s *Storage) UploadTTLSeconds() int   { return int(s.cfg.UploadTTL.Seconds()) }
 func (s *Storage) DownloadTTLSeconds() int { return int(s.cfg.DownloadTTL.Seconds()) }
 
+// UploadExpiry / DownloadExpiry return the TTL both as relative seconds and as
+// an absolute UTC timestamp (now + TTL, RFC3339). The absolute form lets a
+// client that *stores* a URL decide "is it stale now?" with a simple now > at
+// comparison, without having to record when it received the response.
+func (s *Storage) UploadExpiry() (seconds int, at string) {
+	return int(s.cfg.UploadTTL.Seconds()), time.Now().UTC().Add(s.cfg.UploadTTL).Format(time.RFC3339)
+}
+
+func (s *Storage) DownloadExpiry() (seconds int, at string) {
+	return int(s.cfg.DownloadTTL.Seconds()), time.Now().UTC().Add(s.cfg.DownloadTTL).Format(time.RFC3339)
+}
+
 // PresignUpload returns a presigned PUT URL for a fresh object key. The
 // content-length-range condition isn't expressible on a plain PUT presign; we
 // enforce the per-file limit at issuance (size is supplied) and rely on the

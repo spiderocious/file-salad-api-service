@@ -103,6 +103,36 @@ func TestRevokeAll(t *testing.T) {
 	}
 }
 
+// With Redis down, every operation surfaces an error rather than misbehaving —
+// covers the error-return branches.
+func TestRedisErrors(t *testing.T) {
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rc, _ := redis.Connect(context.Background(), "redis://"+mr.Addr())
+	s := session.NewStore(rc, time.Hour)
+	ctx := context.Background()
+
+	// Seed one session, then sever Redis.
+	raw, _ := s.Create(ctx, "u_x")
+	mr.Close()
+	_ = rc
+
+	if _, err := s.Create(ctx, "u_y"); err == nil {
+		t.Error("Create should error when Redis is down")
+	}
+	if _, _, err := s.Rotate(ctx, raw); err == nil {
+		t.Error("Rotate should error when Redis is down")
+	}
+	if err := s.Revoke(ctx, raw); err == nil {
+		t.Error("Revoke should error when Redis is down")
+	}
+	if err := s.RevokeAll(ctx, "u_x"); err == nil {
+		t.Error("RevokeAll should error when Redis is down")
+	}
+}
+
 func TestExpiry(t *testing.T) {
 	mr, err := miniredis.Run()
 	if err != nil {

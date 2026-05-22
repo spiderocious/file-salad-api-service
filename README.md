@@ -30,9 +30,11 @@ link: the backend checks quota and signs a URL; the client uploads bytes
   enforced server-side.
 - **Web uploads (anonymous one-pager):** same presign path, no account, capped
   per browser by IP + `X-Fingerprint`.
+- **Share codes:** mint a short (7-char), human-shareable code for an uploaded
+  file that anyone can redeem for 24h; redeem is rate-limited per IP.
 
-See [docs/api-docs.md](docs/api-docs.md) for the full API reference and
-[docs/qa-handoff.md](docs/qa-handoff.md) for the QA scenario matrix.
+See [../docs/api-docs.md](../docs/api-docs.md) for the full API reference and
+[../docs/qa-handoff.md](../docs/qa-handoff.md) for the QA scenario matrix.
 
 ## Structure
 
@@ -52,12 +54,15 @@ internal/
   session/                Redis refresh-token sessions (rotation, revoke-all)
   storage/                S3-compatible presign (PUT/GET) + Level-1 download cache
   quota/                  atomic monthly upload counter (server-side source of truth)
-  middleware/             requestID, requestLog, errorHandler, requireAuth
+  sharecode/              short shareable codes in Redis (SETNX + TTL)
+  stats/                  background "total uploads" counter
+  middleware/             requestID, requestLog, errorHandler, requireAuth, rateLimit
   features/
     health/               GET /api/v1/health
     auth/                 register / login / refresh / logout / me
     uploads/              hosted presign / complete / list / download
-    webuploads/           anonymous presign / download / usage
+    webuploads/           anonymous presign / download / usage / stats
+    share/                mint share code / redeem code (rate-limited)
 ```
 
 Each feature exposes a `Register(rg *gin.RouterGroup, ...)` function; `app` wires
@@ -137,6 +142,7 @@ There's no `.env` in production; set the variables through your platform.
 | `MONTHLY_UPLOAD_CAP` | no | `50` | hosted + web per-month cap |
 | `MAX_FILE_SIZE_BYTES` | no | `52428800` | 50 MB per-file limit |
 | `HOSTED_LINK_EXPIRY_DAYS` | no | `90` | public link lifetime |
+| `SHARE_CODE_TTL` | no | `24h` | how long a shareable code stays valid |
 
 ## Endpoints
 
@@ -155,3 +161,5 @@ There's no `.env` in production; set the variables through your platform.
 | POST | `/api/v1/web/uploads/presign` | — (`X-Fingerprint`) | Anonymous presign + cap |
 | GET | `/api/v1/web/uploads/:id/download` | — | Presigned GET |
 | GET | `/api/v1/web/usage` | — (`X-Fingerprint`) | Cap usage |
+| POST | `/api/v1/share` | — | Mint a 24h share code from an `upload_id` |
+| GET | `/api/v1/share/:code` | — | Redeem a code → presigned GET (rate-limited) |

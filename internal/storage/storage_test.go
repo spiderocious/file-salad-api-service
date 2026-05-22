@@ -97,6 +97,23 @@ func TestPresignDownloadAndCache(t *testing.T) {
 	}
 }
 
+// An empty key makes the SDK serializer reject the request — covers the error
+// branches in PresignUpload / PresignDownload / PresignDownloadURL.
+func TestPresignErrors(t *testing.T) {
+	s, _ := newStorage(t, true)
+	ctx := context.Background()
+
+	if _, err := s.PresignUpload(ctx, "", "text/plain"); err == nil {
+		t.Error("PresignUpload should error on empty key")
+	}
+	if _, _, err := s.PresignDownload(ctx, ""); err == nil {
+		t.Error("PresignDownload should error on empty key")
+	}
+	if _, err := s.PresignDownloadURL(ctx, ""); err == nil {
+		t.Error("PresignDownloadURL should error on empty key")
+	}
+}
+
 func TestPresignDownloadURLNoCache(t *testing.T) {
 	s, mr := newStorage(t, true)
 	ctx := context.Background()
