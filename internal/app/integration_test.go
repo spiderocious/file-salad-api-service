@@ -102,7 +102,11 @@ func setup(t *testing.T) *harness {
 	uploadSvc := uploads.NewService(uploadRepo, store, counter, 1000, 90)
 	codes := sharecode.NewStore(rc, time.Hour)
 
-	cfg := &env.Env{NodeEnv: "test", WebBaseURL: "*"}
+	cfg := &env.Env{
+		NodeEnv: "test", WebBaseURL: "*",
+		FeatureShouldShowCodes: true, FeatureShouldSupportBYOK: false,
+		FeatureFlagTTL: time.Hour,
+	}
 	engine := app.Build(cfg, app.Deps{
 		Auth:    authDeps,
 		Uploads: &uploads.Deps{Service: uploadSvc, JWT: jwt, Counter: statsCounter},
@@ -572,6 +576,34 @@ func TestShareRedeemRateLimitIntegration(t *testing.T) {
 	}
 	if !got429 {
 		t.Fatal("expected a 429 within 12 redeem attempts (rate limit not enforced)")
+	}
+}
+
+func TestFeaturesEndpointIntegration(t *testing.T) {
+	h := setup(t)
+
+	code, body := h.do(t, "GET", "/api/v1/features", nil, nil)
+	if code != 200 {
+		t.Fatalf("/features code %d body %v", code, body)
+	}
+	d := dataMap(body)
+	if d["should_show_codes"] != true {
+		t.Fatalf("should_show_codes = %v (want true from harness)", d["should_show_codes"])
+	}
+	if d["should_support_byok"] != false {
+		t.Fatalf("should_support_byok = %v (want false from harness)", d["should_support_byok"])
+	}
+	at, ok := d["expires_at"].(string)
+	if !ok || at == "" {
+		t.Fatalf("missing expires_at: %v", d)
+	}
+	parsed, err := time.Parse(time.RFC3339, at)
+	if err != nil {
+		t.Fatalf("expires_at not RFC3339: %v", err)
+	}
+	delta := time.Until(parsed)
+	if delta < 59*time.Minute || delta > 61*time.Minute {
+		t.Fatalf("expires_at delta = %v, want ~1h", delta)
 	}
 }
 

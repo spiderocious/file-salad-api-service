@@ -10,6 +10,7 @@ import (
 
 	"github.com/feranmi/file-salad-backend/internal/env"
 	"github.com/feranmi/file-salad-backend/internal/features/auth"
+	"github.com/feranmi/file-salad-backend/internal/features/features"
 	"github.com/feranmi/file-salad-backend/internal/features/health"
 	"github.com/feranmi/file-salad-backend/internal/features/share"
 	"github.com/feranmi/file-salad-backend/internal/features/uploads"
@@ -48,6 +49,11 @@ func Build(cfg *env.Env, deps Deps) *gin.Engine {
 
 	api := r.Group("/api/v1")
 	health.Register(api, cfg.NodeEnv)
+	features.Register(api, features.Deps{
+		ShouldShowCodes:   cfg.FeatureShouldShowCodes,
+		ShouldSupportBYOK: cfg.FeatureShouldSupportBYOK,
+		TTL:               cfg.FeatureFlagTTL,
+	})
 	auth.Register(api, deps.Auth)
 	if deps.Uploads != nil {
 		uploads.Register(api, *deps.Uploads)
