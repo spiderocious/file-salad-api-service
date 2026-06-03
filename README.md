@@ -59,6 +59,7 @@ internal/
   middleware/             requestID, requestLog, errorHandler, requireAuth, rateLimit
   features/
     health/               GET /api/v1/health
+    features/             GET /api/v1/features (UI flags + cache hint)
     auth/                 register / login / refresh / logout / me
     uploads/              hosted presign / complete / list / download
     webuploads/           anonymous presign / download / usage / stats
@@ -143,12 +144,16 @@ There's no `.env` in production; set the variables through your platform.
 | `MAX_FILE_SIZE_BYTES` | no | `52428800` | 50 MB per-file limit |
 | `HOSTED_LINK_EXPIRY_DAYS` | no | `90` | public link lifetime |
 | `SHARE_CODE_TTL` | no | `24h` | how long a shareable code stays valid |
+| `FEATURE_SHOULD_SHOW_CODES` | no | `false` | expose share-codes UI (drives `/features`) |
+| `FEATURE_SHOULD_SUPPORT_BYOK` | no | `false` | expose BYO-bucket UI (drives `/features`) |
+| `FEATURE_FLAG_TTL` | no | `5m` | how long the FE should cache `/features` (Go duration) |
 
 ## Endpoints
 
 | Method | Path | Auth | Notes |
 |---|---|---|---|
 | GET | `/api/v1/health` | — | Liveness |
+| GET | `/api/v1/features` | — | UI feature flags + `expires_at` cache hint |
 | POST | `/api/v1/auth/register` | — | Create account → tokens |
 | POST | `/api/v1/auth/login` | — | → tokens |
 | POST | `/api/v1/auth/refresh` | — | Rotate refresh token |

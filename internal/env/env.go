@@ -52,6 +52,11 @@ type Env struct {
 
 	// Share codes.
 	ShareCodeTTL time.Duration // how long a shareable code stays valid (default 24h)
+
+	// Feature flags surfaced to the frontend via GET /api/v1/features.
+	FeatureShouldShowCodes   bool          // expose share-codes UI
+	FeatureShouldSupportBYOK bool          // expose BYO-bucket UI
+	FeatureFlagTTL           time.Duration // how long the FE should cache the flag response (default 5m)
 }
 
 const minSecretLen = 32
@@ -115,6 +120,10 @@ func Load() (*Env, error) {
 	if err != nil {
 		problems = append(problems, "SHARE_CODE_TTL: must be a Go duration (e.g. 24h)")
 	}
+	featureFlagTTL, err := time.ParseDuration(getDefault("FEATURE_FLAG_TTL", "5m"))
+	if err != nil {
+		problems = append(problems, "FEATURE_FLAG_TTL: must be a Go duration (e.g. 5m)")
+	}
 
 	monthlyCap := mustInt("MONTHLY_UPLOAD_CAP", 50, &problems)
 	maxFileSize := mustInt64("MAX_FILE_SIZE_BYTES", 52428800, &problems) // 50 MB
@@ -125,29 +134,32 @@ func Load() (*Env, error) {
 	}
 
 	return &Env{
-		NodeEnv:                nodeEnv,
-		Port:                   port,
-		LogLevel:               logLevel,
-		JWTAccessSecret:        accessSecret,
-		JWTRefreshSecret:       refreshSecret,
-		JWTAccessExpiresIn:     getDefault("JWT_ACCESS_EXPIRES_IN", "15m"),
-		JWTRefreshExpiresIn:    getDefault("JWT_REFRESH_EXPIRES_IN", "30d"),
-		WebBaseURL:             webBaseURL,
-		MongoURI:               mongoURI,
-		MongoDB:                mongoDB,
-		RedisURL:               redisURL,
-		StorageEndpoint:        os.Getenv("STORAGE_ENDPOINT"),
-		StorageRegion:          getDefault("STORAGE_REGION", "auto"),
-		StorageAccessKeyID:     os.Getenv("STORAGE_ACCESS_KEY_ID"),
-		StorageSecretAccessKey: os.Getenv("STORAGE_SECRET_ACCESS_KEY"),
-		StorageBucket:          os.Getenv("STORAGE_BUCKET"),
-		StorageUsePathStyle:    os.Getenv("STORAGE_USE_PATH_STYLE") == "true",
-		UploadURLTTL:           uploadTTL,
-		DownloadURLTTL:         downloadTTL,
-		MonthlyUploadCap:       monthlyCap,
-		MaxFileSizeBytes:       maxFileSize,
-		HostedLinkExpiryDays:   linkExpiryDays,
-		ShareCodeTTL:           shareCodeTTL,
+		NodeEnv:                  nodeEnv,
+		Port:                     port,
+		LogLevel:                 logLevel,
+		JWTAccessSecret:          accessSecret,
+		JWTRefreshSecret:         refreshSecret,
+		JWTAccessExpiresIn:       getDefault("JWT_ACCESS_EXPIRES_IN", "15m"),
+		JWTRefreshExpiresIn:      getDefault("JWT_REFRESH_EXPIRES_IN", "30d"),
+		WebBaseURL:               webBaseURL,
+		MongoURI:                 mongoURI,
+		MongoDB:                  mongoDB,
+		RedisURL:                 redisURL,
+		StorageEndpoint:          os.Getenv("STORAGE_ENDPOINT"),
+		StorageRegion:            getDefault("STORAGE_REGION", "auto"),
+		StorageAccessKeyID:       os.Getenv("STORAGE_ACCESS_KEY_ID"),
+		StorageSecretAccessKey:   os.Getenv("STORAGE_SECRET_ACCESS_KEY"),
+		StorageBucket:            os.Getenv("STORAGE_BUCKET"),
+		StorageUsePathStyle:      os.Getenv("STORAGE_USE_PATH_STYLE") == "true",
+		UploadURLTTL:             uploadTTL,
+		DownloadURLTTL:           downloadTTL,
+		MonthlyUploadCap:         monthlyCap,
+		MaxFileSizeBytes:         maxFileSize,
+		HostedLinkExpiryDays:     linkExpiryDays,
+		ShareCodeTTL:             shareCodeTTL,
+		FeatureShouldShowCodes:   os.Getenv("FEATURE_SHOULD_SHOW_CODES") == "true",
+		FeatureShouldSupportBYOK: os.Getenv("FEATURE_SHOULD_SUPPORT_BYOK") == "true",
+		FeatureFlagTTL:           featureFlagTTL,
 	}, nil
 }
 

@@ -1,6 +1,9 @@
 package env
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 // validBase sets the minimum required env for a successful Load.
 func validBase(t *testing.T) {
@@ -30,6 +33,12 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if e.ShareCodeTTL.Hours() != 24 {
 		t.Fatalf("share code ttl default wrong: %v", e.ShareCodeTTL)
+	}
+	if e.FeatureFlagTTL.Minutes() != 5 {
+		t.Fatalf("feature flag ttl default wrong: %v", e.FeatureFlagTTL)
+	}
+	if e.FeatureShouldShowCodes || e.FeatureShouldSupportBYOK {
+		t.Fatalf("feature flags should default to false: %+v", e)
 	}
 	if e.StorageRegion != "auto" {
 		t.Fatalf("region default = %q", e.StorageRegion)
@@ -87,6 +96,9 @@ func TestLoadCustomValues(t *testing.T) {
 	t.Setenv("PORT", "9000")
 	t.Setenv("MONTHLY_UPLOAD_CAP", "10")
 	t.Setenv("STORAGE_USE_PATH_STYLE", "true")
+	t.Setenv("FEATURE_SHOULD_SHOW_CODES", "true")
+	t.Setenv("FEATURE_SHOULD_SUPPORT_BYOK", "true")
+	t.Setenv("FEATURE_FLAG_TTL", "30s")
 	e, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -96,6 +108,20 @@ func TestLoadCustomValues(t *testing.T) {
 	}
 	if e.Port != 9000 || e.MonthlyUploadCap != 10 || !e.StorageUsePathStyle {
 		t.Fatalf("custom values wrong: %+v", e)
+	}
+	if !e.FeatureShouldShowCodes || !e.FeatureShouldSupportBYOK {
+		t.Fatalf("feature flags not toggled: %+v", e)
+	}
+	if e.FeatureFlagTTL != 30*time.Second {
+		t.Fatalf("feature flag ttl = %v, want 30s", e.FeatureFlagTTL)
+	}
+}
+
+func TestLoadInvalidFeatureFlagTTL(t *testing.T) {
+	validBase(t)
+	t.Setenv("FEATURE_FLAG_TTL", "nope")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error for invalid FEATURE_FLAG_TTL")
 	}
 }
 
